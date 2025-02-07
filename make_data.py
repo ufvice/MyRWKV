@@ -19,21 +19,20 @@
   - 灵活支持不同的词表
 """
 
-import json
-import math
-import random
-import sys
-import os
-import struct
-import numpy as np
-from pathlib import Path
 import argparse
+import json
+import os
+import random
+import struct
+from pathlib import Path
 
+import numpy as np
+
+from src.binidx import MMapIndexedDataset
 # -------------------------------
 # 导入自定义模块
 # -------------------------------
 from tokenizer.rwkv_tokenizer import TRIE_TOKENIZER
-from src.binidx import MMapIndexedDataset
 
 tokenizer = None  # 全局变量，在main中初始化
 
