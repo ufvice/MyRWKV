@@ -141,14 +141,14 @@ def process_content(content):
     chapter_pattern = re.compile(f"^(?:第{number_pattern}[章节]|[章节]{number_pattern})")
 
     for line in lines:
-        sline = line.rstrip()
+        sline = line.strip()
         if volume_pattern.match(sline):
             continue
         if chapter_pattern.match(sline):
             processed_lines.append(("", True))
             chapter_count += 1
             continue
-        if sline.strip() == "":
+        if sline == "":
             continue
         new_line = re.sub(r'^\s+', '', sline) if re.match(r'^\s+', sline) else sline
         processed_lines.append((new_line, False))
