@@ -92,6 +92,33 @@ def process_txt_file(file_path):
         return None
 
 
+def check_line_type(line):
+    """
+    检查行的类型
+    返回值：
+    - 0: 普通行
+    - 1: 单独的卷名行（需要忽略）
+    - 2: 包含章节名的行（需要替换为回车）
+    """
+    number_pattern = r'(?:(?:[零一二三四五六七八九十百千万\d]+)|(?:\d+))'
+
+    # 卷标题模式
+    volume_pattern = f"^[【\[]*(?:第{number_pattern}卷|卷{number_pattern})(?:[：:\s]\s*\S+)?[】\]]*$"
+
+    # 章节标题模式（包括可能的卷标题前缀）
+    chapter_pattern = f"第{number_pattern}[章节]|[章节]{number_pattern}"
+
+    # 先检查是否是纯卷标题
+    if re.match(volume_pattern, line.strip()):
+        return 1
+
+    # 再检查是否包含章节标题
+    if re.search(chapter_pattern, line.strip()):
+        return 2
+
+    return 0
+
+
 def process_content(content):
     """
     处理小说文本内容
@@ -131,27 +158,21 @@ def process_content(content):
     # 处理每行
     processed_lines = []
     chapter_count = 0
-    # 中文数字和阿拉伯数字的通用模式
-    number_pattern = r'(?:(?:[零一二三四五六七八九十百千万\d]+)|(?:\d+))'
-
-    # 修改后的正则表达式，支持两种格式：
-    # 1. 第X卷/章/节
-    # 2. 卷/章/节X
-    volume_pattern = re.compile(f"^(?:第{number_pattern}卷|卷{number_pattern})")
-    chapter_pattern = re.compile(f"^(?:第{number_pattern}[章节]|[章节]{number_pattern})")
 
     for line in lines:
         sline = line.strip()
-        if volume_pattern.match(sline):
-            continue
-        if chapter_pattern.match(sline):
-            processed_lines.append(("", True))
-            chapter_count += 1
-            continue
         if sline == "":
             continue
-        new_line = re.sub(r'^\s+', '', sline) if re.match(r'^\s+', sline) else sline
-        processed_lines.append((new_line, False))
+
+        line_type = check_line_type(sline)
+        if line_type == 1:  # 单独的卷名行，直接忽略
+            continue
+        elif line_type == 2:  # 包含章节名的行，替换为回车
+            processed_lines.append(("", True))
+            chapter_count += 1
+        else:  # 普通行
+            new_line = re.sub(r'^\s+', '', sline) if re.match(r'^\s+', sline) else sline
+            processed_lines.append((new_line, False))
 
     if chapter_count <= MIN_CHAPTERS:
         print(f"[WARN] 章节数({chapter_count})不足最小要求({MIN_CHAPTERS})")
