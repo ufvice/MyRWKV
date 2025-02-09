@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 用法示例：
-    python make_data.py demo.jsonl 3 4096 [--vocab path/to/vocab.txt]
+    python make_data.py demo.jsonl 3 4096
 优化功能：
   - 检查并使用已有的临时分词文件，避免重复分词
   - 保留临时分词文件以供后续使用
@@ -10,29 +10,27 @@
   - 使用二进制文件进行多轮随机混洗
   - 生成最终的 .bin 和 .idx 文件
   - 计算 magic_prime
-  - 支持自定义词表文件
 优势：
   - 可重用已有的分词结果，显著提升处理速度
   - 分词只在必要时进行一次
   - 内存占用保持低水平
   - 混洗效果与原版一致
-  - 灵活支持不同的词表
 """
 
-import argparse
 import json
-import os
+import math
 import random
+import sys
+import os
 import struct
+import numpy as np
 from pathlib import Path
 
-import numpy as np
-
-from src.binidx import MMapIndexedDataset
 # -------------------------------
 # 导入自定义模块
 # -------------------------------
 from tokenizer.rwkv_tokenizer import TRIE_TOKENIZER
+from src.binidx import MMapIndexedDataset
 
 tokenizer = None  # 全局变量，在main中初始化
 
@@ -138,7 +136,7 @@ class TokenizedDatasetReader:
 
 
 # -------------------------------
-# MMapIndexedDatasetBuilder（原版不变）
+# MMapIndexedDatasetBuilder
 # -------------------------------
 class MMapIndexedDatasetBuilder(object):
     def __init__(self, out_file, dtype=np.uint16):
@@ -162,7 +160,7 @@ class MMapIndexedDatasetBuilder(object):
 
 
 # -------------------------------
-# 质数检测函数（优化版本）
+# 质数检测函数
 # -------------------------------
 def is_prime(n):
     if n <= 1:
@@ -182,20 +180,13 @@ def is_prime(n):
 # -------------------------------
 # 主处理函数
 # -------------------------------
-def process_data(in_file, n_epoch, vocab_file=None):
+def process_data(in_file, n_epoch):
     global tokenizer
     prefix = Path(in_file).stem
-    # 如果使用了自定义词表，在临时文件名中加入词表的标识
-    if vocab_file:
-        vocab_identifier = Path(vocab_file).stem
-        temp_prefix = f"{prefix}_temp_{vocab_identifier}"
-    else:
-        temp_prefix = f"{prefix}_temp"
+    temp_prefix = f"{prefix}_temp"
     final_prefix = prefix
 
     print(f"### Processing {in_file}")
-    if vocab_file:
-        print(f"### Using custom vocabulary: {vocab_file}")
 
     # 检查是否存在可用的临时分词文件
     if check_temp_files(temp_prefix):
@@ -257,33 +248,26 @@ def process_data(in_file, n_epoch, vocab_file=None):
 
 
 # -------------------------------
-# 参数解析函数
-# -------------------------------
-def parse_args():
-    parser = argparse.ArgumentParser(description='Process and tokenize text data')
-    parser.add_argument('input_file', help='Input JSONL file')
-    parser.add_argument('n_epoch', type=int, help='Number of epochs')
-    parser.add_argument('ctx_len', type=int, help='Context length')
-    parser.add_argument('--vocab', help='Path to custom vocabulary file', default=None)
-    return parser.parse_args()
-
-
-# -------------------------------
 # 主函数
 # -------------------------------
 if __name__ == "__main__":
-    args = parse_args()
+    if len(sys.argv) < 4:
+        print("Usage: python make_data.py <input.jsonl> <N_EPOCH> <CTX_LEN>")
+        exit(1)
 
-    # 初始化tokenizer，支持自定义词表
-    vocab_path = args.vocab if args.vocab else "tokenizer/rwkv_vocab_v20230424.txt"
-    tokenizer = TRIE_TOKENIZER(vocab_path)
+    N_EPOCH = int(sys.argv[2].strip())
+    IN_FILE = sys.argv[1].strip()
+    CTX_LEN = int(sys.argv[3].strip())
+
+    # 初始化tokenizer
+    tokenizer = TRIE_TOKENIZER("tokenizer/rwkv_vocab_v20230424.txt")
 
     # 处理数据
-    total_tokens, total_docs = process_data(args.input_file, args.n_epoch, args.vocab)
+    total_tokens, total_docs = process_data(IN_FILE, N_EPOCH)
 
     # 验证输出
     print("\n### Verifying result...")
-    data = MMapIndexedDataset(Path(args.input_file).stem)
+    data = MMapIndexedDataset(Path(IN_FILE).stem)
     data_len = len(data)
     data_size = len(data._bin_buffer) // data._index._dtype_size
 
@@ -293,7 +277,7 @@ if __name__ == "__main__":
     for idx in TODO:
         ptr, size = data._index[idx]
         dix = data.get(idx=idx, offset=0, length=size).astype(int)
-        print("-" * 70 + f"[{Path(args.input_file).stem} idx {idx} sz {size}]")
+        print("-" * 70 + f"[{Path(IN_FILE).stem} idx {idx} sz {size}]")
         assert dix[-1] == 0
         dix = dix[:-1]
         if len(dix) > PREVIEW_LIMIT:
@@ -318,8 +302,8 @@ if __name__ == "__main__":
     print(f"{'-' * 80}\n### Final output has {data_size} tokens, {data_len} documents. Dtype {data._index.dtype}")
 
     # 计算magic_prime
-    if data_size >= args.ctx_len * 3:
-        n_chunk = int(data_size // args.ctx_len) - 1
+    if data_size >= CTX_LEN * 3:
+        n_chunk = int(data_size // CTX_LEN) - 1
         # 调整起始点，使得 start % 3 == 2
         start = n_chunk - ((n_chunk - 2) % 3)
         magic_prime = None
@@ -328,6 +312,6 @@ if __name__ == "__main__":
                 magic_prime = i
                 break
         if magic_prime:
-            print(f"\n### magic_prime = {magic_prime} (for ctxlen {args.ctx_len})")
-            print(f'\n--my_exit_tokens {data_size} --magic_prime {magic_prime} --ctx_len {args.ctx_len}\n')
+            print(f"\n### magic_prime = {magic_prime} (for ctxlen {CTX_LEN})")
+            print(f'\n--my_exit_tokens {data_size} --magic_prime {magic_prime} --ctx_len {CTX_LEN}\n')
             exit(0)
