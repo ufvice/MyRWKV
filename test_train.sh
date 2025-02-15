@@ -9,15 +9,15 @@
 #
 #######################################################################################################################
 MODEL_TYPE="x070" # x070 => rwkv-7.0
-N_LAYER="24"
-N_EMBD="2048"
+N_LAYER="32"
+N_EMBD="2560"
 CTX_LEN="32768" # !!! change magic_prime if you change ctx_len !!!
-TOKEN_NUM=9951649622
-MAGIC_PRIME=303689
-DATA_PATH="data/novel"
-WANDB_PROJ="rwkv7-1.5B-novel-ctx32k"
+TOKEN_NUM=15481587
+MAGIC_PRIME=467
+DATA_PATH="data/test_novel"
+WANDB_PROJ="rwkv-dev"
 PROJ_DIR="out/L"$N_LAYER"-D"$N_EMBD"-"$MODEL_TYPE # set output folder
-M_BSZ="4" # takes ~9G VRAM here => reduce this to save VRAM, increase this for faster speed
+M_BSZ="1" # takes ~9G VRAM here => reduce this to save VRAM, increase this for faster speed
 LR_INIT="4e-5"
 WARM_UP=50
 LR_FINAL="1e-5"
